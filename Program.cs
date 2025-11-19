@@ -13,6 +13,7 @@ class Program
     const int BANDS = 32;                      // 頻帶數
     const double F_MIN = 80, F_MAX = 20000;    // 降低超低頻影響：80Hz 起跳
     const int UDP_PORT = 31337;
+    static readonly IPAddress TargetIp = IPAddress.Parse("10.99.100.255");
 
     // dBFS 映射範圍（把 band 的 dBFS 映到 0..1）
     const double MIN_DB = -60.0;
@@ -34,8 +35,10 @@ class Program
 
     static void Main()
     {
-        using var udp = new UdpClient() { EnableBroadcast = true };
-        var endpoint = new IPEndPoint(IPAddress.Broadcast, UDP_PORT);
+        using var udp = new UdpClient(AddressFamily.InterNetwork);
+        udp.EnableBroadcast = true;
+
+        var endpoint = new IPEndPoint(TargetIp, UDP_PORT);
 
         using var cap = new WasapiLoopbackCapture(); // 抓系統播放端
         var sr = cap.WaveFormat.SampleRate;
