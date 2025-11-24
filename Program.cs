@@ -34,26 +34,43 @@ class Program
 
     static void Main(string[] args)
     {
-        // Parse target IP from command line (default: broadcast)
-        IPAddress targetIP = IPAddress.Broadcast;
+        // Parse target IPs from command line (default: broadcast)
+        var targetEndpoints = new System.Collections.Generic.List<IPEndPoint>();
         bool useBroadcast = true;
 
         if (args.Length > 0)
         {
-            if (IPAddress.TryParse(args[0], out var parsedIP))
+            Console.WriteLine($"Parsing {args.Length} target IP(s)...");
+            foreach (var arg in args)
             {
-                targetIP = parsedIP;
-                // useBroadcast = false;
-                Console.WriteLine($"Target IP: {targetIP}");
+                if (IPAddress.TryParse(arg, out var parsedIP))
+                {
+                    targetEndpoints.Add(new IPEndPoint(parsedIP, UDP_PORT));
+                    Console.WriteLine($"  Added target: {parsedIP}:{UDP_PORT}");
+                }
+                else
+                {
+                    Console.WriteLine($"  Invalid IP address: {arg}, skipping.");
+                }
+            }
+
+            if (targetEndpoints.Count > 0)
+            {
+                useBroadcast = false;
             }
             else
             {
-                Console.WriteLine($"Invalid IP address: {args[0]}, using broadcast instead.");
+                Console.WriteLine("No valid IPs provided, using broadcast instead.");
             }
         }
 
+        // If no valid IPs provided, use broadcast
+        if (targetEndpoints.Count == 0)
+        {
+            targetEndpoints.Add(new IPEndPoint(IPAddress.Broadcast, UDP_PORT));
+        }
+
         using var udp = new UdpClient() { EnableBroadcast = useBroadcast };
-        var endpoint = new IPEndPoint(targetIP, UDP_PORT);
 
         using var cap = new WasapiLoopbackCapture(); // 抓系統播放端
         var sr = cap.WaveFormat.SampleRate;
@@ -147,7 +164,11 @@ class Program
                     for (int i = 0; i < BANDS; i++)
                         payload[3 + i] = (byte)levels[i];
 
-                    udp.Send(payload, payload.Length, endpoint);
+                    // Send to all target endpoints
+                    foreach (var endpoint in targetEndpoints)
+                    {
+                        udp.Send(payload, payload.Length, endpoint);
+                    }
 
                     available -= HOP;
                 }
@@ -161,8 +182,10 @@ class Program
         cap.RecordingStopped += (s, e) => Console.WriteLine($"Stopped: {e.Exception?.Message}");
         cap.StartRecording();
 
-        string mode = useBroadcast ? "broadcast" : $"to {targetIP}";
-        Console.WriteLine($"Streaming {BANDS} bands via UDP {mode} :{UDP_PORT}. Press ENTER to stop.");
+        string mode = useBroadcast
+            ? "broadcast"
+            : $"to {targetEndpoints.Count} target(s): {string.Join(", ", targetEndpoints.Select(ep => ep.Address))}";
+        Console.WriteLine($"Streaming {BANDS} bands via UDP {mode} on port {UDP_PORT}. Press ENTER to stop.");
         Console.ReadLine();
         cap.StopRecording();
     }
