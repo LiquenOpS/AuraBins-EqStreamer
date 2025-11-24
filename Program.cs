@@ -32,10 +32,28 @@ class Program
     static double[] prev = new double[BANDS];  // 平滑狀態
     static (int start, int end)[] bandBins;
 
-    static void Main()
+    static void Main(string[] args)
     {
-        using var udp = new UdpClient() { EnableBroadcast = true };
-        var endpoint = new IPEndPoint(IPAddress.Broadcast, UDP_PORT);
+        // Parse target IP from command line (default: broadcast)
+        IPAddress targetIP = IPAddress.Broadcast;
+        bool useBroadcast = true;
+
+        if (args.Length > 0)
+        {
+            if (IPAddress.TryParse(args[0], out var parsedIP))
+            {
+                targetIP = parsedIP;
+                // useBroadcast = false;
+                Console.WriteLine($"Target IP: {targetIP}");
+            }
+            else
+            {
+                Console.WriteLine($"Invalid IP address: {args[0]}, using broadcast instead.");
+            }
+        }
+
+        using var udp = new UdpClient() { EnableBroadcast = useBroadcast };
+        var endpoint = new IPEndPoint(targetIP, UDP_PORT);
 
         using var cap = new WasapiLoopbackCapture(); // 抓系統播放端
         var sr = cap.WaveFormat.SampleRate;
@@ -142,7 +160,9 @@ class Program
 
         cap.RecordingStopped += (s, e) => Console.WriteLine($"Stopped: {e.Exception?.Message}");
         cap.StartRecording();
-        Console.WriteLine($"Streaming {BANDS} bands via UDP broadcast :{UDP_PORT}. Press ENTER to stop.");
+
+        string mode = useBroadcast ? "broadcast" : $"to {targetIP}";
+        Console.WriteLine($"Streaming {BANDS} bands via UDP {mode} :{UDP_PORT}. Press ENTER to stop.");
         Console.ReadLine();
         cap.StopRecording();
     }
